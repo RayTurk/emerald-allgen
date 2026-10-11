@@ -11,7 +11,7 @@ extern const u32 gPokeballSelection_Gfx[];
 // Groups 0-8 are Gens 1-9 (grass, fire, water). The rest are special starters.
 #define STARTERS_PER_GROUP      3
 #define NUM_GEN_STARTER_GROUPS  9
-#define NUM_SPECIAL_GROUPS      4 // Specials 1-2, Legends 1-2 (the baby legendaries)
+#define NUM_SPECIAL_GROUPS      4 // Specials 1-2, Mythics, Beasts
 #define NUM_STARTER_GROUPS      (NUM_GEN_STARTER_GROUPS + NUM_SPECIAL_GROUPS)
 #define NUM_STARTER_CHOICES     (NUM_STARTER_GROUPS * STARTERS_PER_GROUP)
 // Post-game legendary pick from Birch, shown with the same screen but never offered as a starter

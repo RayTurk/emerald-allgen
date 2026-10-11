@@ -135,8 +135,8 @@ static const u16 sStarterMon[(NUM_STARTER_GROUPS + NUM_REWARD_GROUPS) * STARTERS
     SPECIES_SPRIGATITO, SPECIES_FUECOCO,    SPECIES_QUAXLY,    // Gen 9
     SPECIES_PIKACHU,    SPECIES_EEVEE,      SPECIES_ABRA,      // Specials 1
     SPECIES_RIOLU,      SPECIES_TOGEPI,     SPECIES_DRATINI,   // Specials 2
-    SPECIES_COSMOG,     SPECIES_KUBFU,      SPECIES_POIPOLE,   // Legends 1
-    SPECIES_TYPE_NULL,  SPECIES_MELTAN,     SPECIES_NONE,      // Legends 2
+    SPECIES_MEW,        SPECIES_MEWTWO,     SPECIES_CELEBI,    // Mythics
+    SPECIES_RAIKOU,     SPECIES_ENTEI,      SPECIES_SUICUNE,   // Beasts
     // Post-game reward groups (Birch's lab after the National Dex upgrade)
     SPECIES_MEW,        SPECIES_MEWTWO,     SPECIES_CELEBI,    // Mythic
     SPECIES_RAIKOU,     SPECIES_ENTEI,      SPECIES_SUICUNE,   // Beasts
@@ -171,12 +171,12 @@ static const u8 sSpecialRivalLines[NUM_SPECIAL_GROUPS * STARTERS_PER_GROUP][2] =
     {5, 1}, // Riolu   -> Fennekin line (Delphox is Psychic)
     {3, 2}, // Togepi  -> Piplup line (Empoleon is Steel)
     {6, 2}, // Dratini -> Popplio line (Primarina is Fairy)
-    {5, 2}, // Cosmog  -> Froakie line (Greninja is Dark)
-    {6, 0}, // Kubfu   -> Rowlet line (Decidueye is Flying/Ghost)
-    {5, 1}, // Poipole -> Fennekin line (Delphox is Psychic)
-    {5, 0}, // Type: Null -> Chespin line (Chesnaught is Fighting)
-    {3, 1}, // Meltan  -> Chimchar line (Infernape is Fire/Fighting)
-    {0, 0}, // (empty slot)
+    {5, 2}, // Mew     -> Froakie line (Greninja is Dark)
+    {6, 1}, // Mewtwo  -> Litten line (Incineroar is Dark)
+    {5, 1}, // Celebi  -> Fennekin line (Fire)
+    {3, 0}, // Raikou  -> Turtwig line (Torterra is Ground)
+    {4, 2}, // Entei   -> Oshawott line (Water)
+    {4, 0}, // Suicune -> Snivy line (Grass)
 };
 
 static const struct ListMenuItem sStarterGroupItems[NUM_STARTER_GROUPS] =
@@ -192,8 +192,8 @@ static const struct ListMenuItem sStarterGroupItems[NUM_STARTER_GROUPS] =
     {COMPOUND_STRING("Paldea"),     8},
     {COMPOUND_STRING("Specials 1"), 9},
     {COMPOUND_STRING("Specials 2"), 10},
-    {COMPOUND_STRING("Legends 1"),  11},
-    {COMPOUND_STRING("Legends 2"),  12},
+    {COMPOUND_STRING("Mythics"),    11},
+    {COMPOUND_STRING("Beasts"),     12},
 };
 
 static const struct ListMenuItem sRewardGroupItems[NUM_REWARD_GROUPS] =
