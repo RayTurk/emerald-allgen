@@ -1013,6 +1013,7 @@ static void CB2_GiveStarter(void)
     *GetVarPointer(VAR_STARTER_MON) = GetStarterRivalSlot(gSpecialVar_Result);
     starterMon = GetStarterPokemon(gSpecialVar_Result);
     ScriptGiveMon(starterMon, 5, ITEM_NONE);
+    EnsureStarterCanFight(&gParties[B_TRAINER_PLAYER][0]);
     ResetTasks();
     PlayBattleBGM();
     SetMainCallback2(CB2_StartFirstBattle);

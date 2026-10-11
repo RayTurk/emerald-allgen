@@ -7698,7 +7698,9 @@ const struct SpeciesInfo gSpeciesInfoGen7[] =
         .perfectIVCount = LEGENDARY_PERFECT_IV_COUNT,
         .levelUpLearnset = sPoipoleLevelUpLearnset,
         .teachableLearnset = sPoipoleTeachableLearnset,
-        .evolutions = EVOLUTION({EVO_LEVEL, 0, SPECIES_NAGANADEL, CONDITIONS({IF_KNOWS_MOVE, MOVE_DRAGON_PULSE})}),
+        // emerald-allgen: Dragon Pulse is known from level 1 in later games, so the move check
+        // would evolve it instantly. Evolves by level instead.
+        .evolutions = EVOLUTION({EVO_LEVEL, 40, SPECIES_NAGANADEL}),
     },
 
     [SPECIES_NAGANADEL] =
@@ -8113,6 +8115,8 @@ const struct SpeciesInfo gSpeciesInfoGen7[] =
         .perfectIVCount = LEGENDARY_PERFECT_IV_COUNT,
         .levelUpLearnset = sMeltanLevelUpLearnset,
         .teachableLearnset = sMeltanTeachableLearnset,
+        // emerald-allgen: Melmetal normally needs Pokémon GO candy
+        .evolutions = EVOLUTION({EVO_LEVEL, 40, SPECIES_MELMETAL}),
     },
 
     [SPECIES_MELMETAL] =

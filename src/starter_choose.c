@@ -3,6 +3,11 @@
 #include "data.h"
 #include "decompress.h"
 #include "event_data.h"
+#include "field_weather.h"
+#include "overworld.h"
+#include "script.h"
+#include "battle_util.h"
+#include "move.h"
 #include "gpu_regs.h"
 #include "international_string_util.h"
 #include "list_menu.h"
@@ -47,6 +52,7 @@ static void Task_CreateStarterLabel(u8 taskId);
 static void CreateStarterPokemonLabel(u8 selection, u8 group);
 static void Task_ShowGroupMenu(u8 taskId);
 static void Task_HandleGroupMenuInput(u8 taskId);
+static void Task_FadeOutAndExit(u8 taskId);
 static u8 CreatePokemonFrontSprite(enum Species species, u8 x, u8 y);
 static void SpriteCB_SelectionHand(struct Sprite *sprite);
 static void SpriteCB_Pokeball(struct Sprite *sprite);
@@ -115,7 +121,8 @@ static const u8 sStarterLabelCoords[STARTER_MON_COUNT][2] =
 
 // emerald-allgen: every starter group, in Poké Ball order (left, middle, right).
 // For Gen groups the order is always grass, fire, water, which the rival logic relies on.
-static const u16 sStarterMon[NUM_STARTER_CHOICES] =
+// SPECIES_NONE leaves that Poké Ball empty (hidden and skipped by the cursor).
+static const u16 sStarterMon[(NUM_STARTER_GROUPS + NUM_REWARD_GROUPS) * STARTERS_PER_GROUP] =
 {
     SPECIES_BULBASAUR,  SPECIES_CHARMANDER, SPECIES_SQUIRTLE,  // Gen 1
     SPECIES_CHIKORITA,  SPECIES_CYNDAQUIL,  SPECIES_TOTODILE,  // Gen 2
@@ -127,8 +134,16 @@ static const u16 sStarterMon[NUM_STARTER_CHOICES] =
     SPECIES_GROOKEY,    SPECIES_SCORBUNNY,  SPECIES_SOBBLE,    // Gen 8
     SPECIES_SPRIGATITO, SPECIES_FUECOCO,    SPECIES_QUAXLY,    // Gen 9
     SPECIES_PIKACHU,    SPECIES_EEVEE,      SPECIES_ABRA,      // Specials 1
-    SPECIES_RIOLU,      SPECIES_GASTLY,     SPECIES_DRATINI,   // Specials 2
+    SPECIES_RIOLU,      SPECIES_TOGEPI,     SPECIES_DRATINI,   // Specials 2
+    SPECIES_COSMOG,     SPECIES_KUBFU,      SPECIES_POIPOLE,   // Legends 1
+    SPECIES_TYPE_NULL,  SPECIES_MELTAN,     SPECIES_NONE,      // Legends 2
+    // Post-game reward groups (Birch's lab after the National Dex upgrade)
+    SPECIES_MEW,        SPECIES_MEWTWO,     SPECIES_CELEBI,    // Mythic
+    SPECIES_RAIKOU,     SPECIES_ENTEI,      SPECIES_SUICUNE,   // Beasts
 };
+
+#define FIRST_REWARD_GROUP NUM_STARTER_GROUPS
+#define REWARD_LEVEL 50
 
 // Full three-stage lines for the Gen starters: [gen][grass/fire/water][stage].
 // Used to swap the rival's Hoenn starter for the same-gen equivalent.
@@ -154,8 +169,14 @@ static const u8 sSpecialRivalLines[NUM_SPECIAL_GROUPS * STARTERS_PER_GROUP][2] =
     {5, 0}, // Eevee   -> Chespin line (Chesnaught is Fighting)
     {5, 2}, // Abra    -> Froakie line (Greninja is Dark)
     {5, 1}, // Riolu   -> Fennekin line (Delphox is Psychic)
-    {6, 1}, // Gastly  -> Litten line (Incineroar is Dark)
+    {3, 2}, // Togepi  -> Piplup line (Empoleon is Steel)
     {6, 2}, // Dratini -> Popplio line (Primarina is Fairy)
+    {5, 2}, // Cosmog  -> Froakie line (Greninja is Dark)
+    {6, 0}, // Kubfu   -> Rowlet line (Decidueye is Flying/Ghost)
+    {5, 1}, // Poipole -> Fennekin line (Delphox is Psychic)
+    {5, 0}, // Type: Null -> Chespin line (Chesnaught is Fighting)
+    {3, 1}, // Meltan  -> Chimchar line (Infernape is Fire/Fighting)
+    {0, 0}, // (empty slot)
 };
 
 static const struct ListMenuItem sStarterGroupItems[NUM_STARTER_GROUPS] =
@@ -171,7 +192,21 @@ static const struct ListMenuItem sStarterGroupItems[NUM_STARTER_GROUPS] =
     {COMPOUND_STRING("Paldea"),     8},
     {COMPOUND_STRING("Specials 1"), 9},
     {COMPOUND_STRING("Specials 2"), 10},
+    {COMPOUND_STRING("Legends 1"),  11},
+    {COMPOUND_STRING("Legends 2"),  12},
 };
+
+static const struct ListMenuItem sRewardGroupItems[NUM_REWARD_GROUPS] =
+{
+    {COMPOUND_STRING("Mythic"), FIRST_REWARD_GROUP},
+    {COMPOUND_STRING("Beasts"), FIRST_REWARD_GROUP + 1},
+};
+
+static const u8 sText_ChooseLegendGroup[] = _("PROF. BIRCH: Pick any one of these.\nPress B if you need more time.");
+static const u8 sText_ChooseLegend[] = _("Choose carefully, {PLAYER}.\nYou can only take one!");
+
+// TRUE while the screen is being used for Birch's post-game legendary pick
+static bool8 sRewardMode;
 
 static const u8 sText_ChooseRegion[] = _("PROF. BIRCH is in trouble!\nPick a region, then a POKéMON.");
 
@@ -434,6 +469,19 @@ static const struct SpriteTemplate sSpriteTemplate_StarterCircle =
 };
 
 // .text
+// Any slot in the table, including the post-game reward groups. SPECIES_NONE for empty slots.
+static u16 GetGroupSpecies(u32 flatIndex)
+{
+    if (flatIndex >= ARRAY_COUNT(sStarterMon))
+        return SPECIES_NONE;
+    return sStarterMon[flatIndex];
+}
+
+u16 GetLegendaryRewardPokemon(u16 index)
+{
+    return GetGroupSpecies(FIRST_REWARD_GROUP * STARTERS_PER_GROUP + index);
+}
+
 u16 GetStarterPokemon(u16 chosenStarterId)
 {
     if (chosenStarterId >= NUM_STARTER_CHOICES)
@@ -497,6 +545,58 @@ u16 GetRivalStarterSpecies(u16 species)
         }
     }
     return species;
+}
+
+static bool32 CanMoveHitNormalType(enum Move move)
+{
+    return move != MOVE_NONE
+        && GetMovePower(move) > 0
+        && GetTypeModifier(GetMoveType(move), TYPE_NORMAL) > UQ_4_12(0.0);
+}
+
+// Some starters can't damage Birch's Zigzagoon at level 5 (Abra only knows Teleport,
+// Cosmog only Splash and Teleport), which makes the first battle unwinnable.
+// Give those a basic attack so every pick can actually fight.
+void EnsureStarterCanFight(struct Pokemon *mon)
+{
+    u32 i;
+    enum Species species = GetMonData(mon, MON_DATA_SPECIES);
+    enum Move fallback;
+
+    for (i = 0; i < MAX_MON_MOVES; i++)
+    {
+        if (CanMoveHitNormalType(GetMonData(mon, MON_DATA_MOVE1 + i)))
+            return;
+    }
+
+    if (GetSpeciesType(species, 0) == TYPE_PSYCHIC || GetSpeciesType(species, 1) == TYPE_PSYCHIC)
+        fallback = MOVE_CONFUSION;
+    else
+        fallback = MOVE_TACKLE;
+
+    if (GiveMoveToMon(mon, fallback) == MON_HAS_MAX_MOVES)
+        SetMonMoveSlot(mon, fallback, MAX_MON_MOVES - 1);
+}
+
+// Special: Birch's post-game legendary pick. Returns the chosen species in VAR_RESULT,
+// or SPECIES_NONE if the player backed out.
+static void Task_OpenLegendaryReward(u8 taskId)
+{
+    if (!gPaletteFade.active)
+    {
+        CleanupOverworldWindowsAndTilemaps();
+        sRewardMode = TRUE;
+        gMain.savedCallback = CB2_ReturnToFieldContinueScript;
+        SetMainCallback2(CB2_ChooseStarter);
+        DestroyTask(taskId);
+    }
+}
+
+void ChooseLegendaryReward(void)
+{
+    LockPlayerFieldControls();
+    FadeScreen(FADE_TO_BLACK, 0);
+    CreateTask(Task_OpenLegendaryReward, 10);
 }
 
 static void VblankCB_StarterChoose(void)
@@ -596,7 +696,7 @@ void CB2_ChooseStarter(void)
     gTasks[taskId].tGroup = HOENN_GEN_GROUP;
     gTasks[taskId].tShowBalls = FALSE;
     gTasks[taskId].tListScroll = 0;
-    gTasks[taskId].tListRow = HOENN_GEN_GROUP;
+    gTasks[taskId].tListRow = sRewardMode ? 0 : HOENN_GEN_GROUP;
 
     // Create hand sprite
     spriteId = CreateSprite(&sSpriteTemplate_Hand, 120, 56, 2);
@@ -633,9 +733,15 @@ static void Task_ShowGroupMenu(u8 taskId)
     struct ListMenuTemplate menu = sListMenuTemplate_Groups;
     u8 windowId;
 
+    if (sRewardMode)
+    {
+        menu.items = sRewardGroupItems;
+        menu.totalItems = NUM_REWARD_GROUPS;
+    }
+
     DrawStdFrameWithCustomTileAndPalette(0, FALSE, 0x2A8, 0xD);
     FillWindowPixelBuffer(0, PIXEL_FILL(1));
-    AddTextPrinterParameterized(0, FONT_NORMAL, sText_ChooseRegion, 0, 1, 0, NULL);
+    AddTextPrinterParameterized(0, FONT_NORMAL, sRewardMode ? sText_ChooseLegendGroup : sText_ChooseRegion, 0, 1, 0, NULL);
     PutWindowTilemap(0);
 
     windowId = AddWindow(&sWindowTemplate_GroupList);
@@ -654,8 +760,10 @@ static void Task_HandleGroupMenuInput(u8 taskId)
     s32 input = ListMenu_ProcessInput(gTasks[taskId].tListTaskId);
     u16 scroll, row;
 
-    if (input < 0)
-        return; // nothing chosen, or B pressed (there's nowhere to back out to)
+    if (input == LIST_NOTHING_CHOSEN)
+        return;
+    if (input == LIST_CANCEL && !sRewardMode)
+        return; // the starter pick can't be backed out of
 
     PlaySE(SE_SELECT);
     DestroyListMenuTask(gTasks[taskId].tListTaskId, &scroll, &row);
@@ -663,6 +771,14 @@ static void Task_HandleGroupMenuInput(u8 taskId)
     gTasks[taskId].tListRow = row;
     ClearStdWindowAndFrameToTransparent(gTasks[taskId].tListWindowId, TRUE);
     RemoveWindow(gTasks[taskId].tListWindowId);
+
+    if (input == LIST_CANCEL)
+    {
+        // Leaving Birch's legendary pick without choosing
+        gSpecialVar_Result = SPECIES_NONE;
+        gTasks[taskId].func = Task_FadeOutAndExit;
+        return;
+    }
 
     gTasks[taskId].tGroup = input;
     gTasks[taskId].tStarterSelection = 1;
@@ -675,7 +791,8 @@ static void Task_StarterChoose(u8 taskId)
 {
     CreateStarterPokemonLabel(gTasks[taskId].tStarterSelection, gTasks[taskId].tGroup);
     DrawStdFrameWithCustomTileAndPalette(0, FALSE, 0x2A8, 0xD);
-    AddTextPrinterParameterized(0, FONT_NORMAL, gText_BirchInTrouble, 0, 1, 0, NULL);
+    FillWindowPixelBuffer(0, PIXEL_FILL(1));
+    AddTextPrinterParameterized(0, FONT_NORMAL, sRewardMode ? sText_ChooseLegend : gText_BirchInTrouble, 0, 1, 0, NULL);
     PutWindowTilemap(0);
     ScheduleBgCopyTilemapToVram(0);
     gTasks[taskId].func = Task_HandleStarterChooseInput;
@@ -696,7 +813,7 @@ static void Task_HandleStarterChooseInput(u8 taskId)
         gTasks[taskId].tCircleSpriteId = spriteId;
 
         // Create Pokémon sprite
-        spriteId = CreatePokemonFrontSprite(GetStarterPokemon(CURRENT_STARTER(taskId)), sPokeballCoords[selection][0], sPokeballCoords[selection][1]);
+        spriteId = CreatePokemonFrontSprite(GetGroupSpecies(CURRENT_STARTER(taskId)), sPokeballCoords[selection][0], sPokeballCoords[selection][1]);
         gSprites[spriteId].affineAnims = &sAffineAnims_StarterPokemon;
         gSprites[spriteId].callback = SpriteCB_StarterPokemon;
 
@@ -711,12 +828,14 @@ static void Task_HandleStarterChooseInput(u8 taskId)
         gTasks[taskId].tShowBalls = FALSE;
         gTasks[taskId].func = Task_ShowGroupMenu;
     }
-    else if (JOY_NEW(DPAD_LEFT) && selection > 0)
+    else if (JOY_NEW(DPAD_LEFT) && selection > 0
+          && GetGroupSpecies(gTasks[taskId].tGroup * STARTERS_PER_GROUP + selection - 1) != SPECIES_NONE)
     {
         gTasks[taskId].tStarterSelection--;
         gTasks[taskId].func = Task_MoveStarterChooseCursor;
     }
-    else if (JOY_NEW(DPAD_RIGHT) && selection < STARTER_MON_COUNT - 1)
+    else if (JOY_NEW(DPAD_RIGHT) && selection < STARTER_MON_COUNT - 1
+          && GetGroupSpecies(gTasks[taskId].tGroup * STARTERS_PER_GROUP + selection + 1) != SPECIES_NONE)
     {
         gTasks[taskId].tStarterSelection++;
         gTasks[taskId].func = Task_MoveStarterChooseCursor;
@@ -735,7 +854,7 @@ static void Task_WaitForStarterSprite(u8 taskId)
 
 static void Task_AskConfirmStarter(u8 taskId)
 {
-    PlayCry_Normal(GetStarterPokemon(CURRENT_STARTER(taskId)), 0);
+    PlayCry_Normal(GetGroupSpecies(CURRENT_STARTER(taskId)), 0);
     FillWindowPixelBuffer(0, PIXEL_FILL(1));
     AddTextPrinterParameterized(0, FONT_NORMAL, gText_ConfirmStarterChoice, 0, 1, 0, NULL);
     ScheduleBgCopyTilemapToVram(0);
@@ -750,6 +869,13 @@ static void Task_HandleConfirmStarterInput(u8 taskId)
     switch (Menu_ProcessInputNoWrapClearOnChoose())
     {
     case 0:  // YES
+        if (sRewardMode)
+        {
+            // Birch's legendary pick returns the species itself to the script
+            gSpecialVar_Result = GetGroupSpecies(CURRENT_STARTER(taskId));
+            gTasks[taskId].func = Task_FadeOutAndExit;
+            break;
+        }
         // Return the starter choice and exit.
         gSpecialVar_Result = CURRENT_STARTER(taskId);
         ResetAllPicSprites();
@@ -770,6 +896,24 @@ static void Task_HandleConfirmStarterInput(u8 taskId)
     }
 }
 
+static void Task_FadeOutAndExit(u8 taskId)
+{
+    if (gTasks[taskId].tShowBalls != 2)
+    {
+        BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 16, RGB_BLACK);
+        gTasks[taskId].tShowBalls = 2; // keeps whatever is on screen visible during the fade
+        return;
+    }
+    if (!gPaletteFade.active)
+    {
+        sRewardMode = FALSE;
+        ResetAllPicSprites();
+        FreeAllWindowBuffers();
+        DestroyTask(taskId);
+        SetMainCallback2(gMain.savedCallback);
+    }
+}
+
 static void Task_DeclineStarter(u8 taskId)
 {
     gTasks[taskId].func = Task_StarterChoose;
@@ -783,7 +927,7 @@ static void CreateStarterPokemonLabel(u8 selection, u8 group)
     s32 width;
     u8 labelLeft, labelRight, labelTop, labelBottom;
 
-    enum Species species = GetStarterPokemon(group * STARTERS_PER_GROUP + selection);
+    enum Species species = GetGroupSpecies(group * STARTERS_PER_GROUP + selection);
     CopyMonCategoryText(species, categoryText);
     speciesName = GetSpeciesName(species);
 
@@ -856,7 +1000,8 @@ static void SpriteCB_SelectionHand(struct Sprite *sprite)
 static void SpriteCB_Pokeball(struct Sprite *sprite)
 {
     // Animate Poké Ball if currently selected
-    sprite->invisible = !gTasks[sprite->sTaskId].tShowBalls;
+    sprite->invisible = !gTasks[sprite->sTaskId].tShowBalls
+                     || GetGroupSpecies(gTasks[sprite->sTaskId].tGroup * STARTERS_PER_GROUP + sprite->sBallId) == SPECIES_NONE;
     if (gTasks[sprite->sTaskId].tStarterSelection == sprite->sBallId)
         StartSpriteAnimIfDifferent(sprite, 1);
     else

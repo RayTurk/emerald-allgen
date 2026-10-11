@@ -639,3 +639,4 @@ gSpecials::
 	def_special StickerManGetBragFlags
 	def_special CheckAddCoins
 	def_special GetChosenStarterPokemon
+	def_special ChooseLegendaryReward, waitstate=1

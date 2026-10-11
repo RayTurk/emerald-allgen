@@ -28,8 +28,8 @@ LittlerootTown_ProfessorBirchsLab_OnTransition:
 	end
 
 LittlerootTown_ProfessorBirchsLab_EventScript_CheckReadyForJohtoStarter::
-	specialvar VAR_RESULT, HasAllHoennMons
-	goto_if_eq VAR_RESULT, TRUE, LittlerootTown_ProfessorBirchsLab_EventScript_SetReadyForJohtoStarter
+	@ emerald-allgen: the legendary pick only needs the National Dex upgrade, not a complete Hoenn dex
+	goto LittlerootTown_ProfessorBirchsLab_EventScript_SetReadyForJohtoStarter
 	setobjectmovementtype LOCALID_BIRCHS_LAB_RIVAL, MOVEMENT_TYPE_WANDER_UP_AND_DOWN
 	setobjectxyperm LOCALID_BIRCHS_LAB_RIVAL, 5, 10
 	end
@@ -287,36 +287,71 @@ LittlerootTown_ProfessorBirchsLab_EventScript_AideReceivedStarter::
 	end
 
 LittlerootTown_ProfessorBirchsLab_EventScript_Cyndaquil::
-	release
-	goto_if_ge VAR_DEX_UPGRADE_JOHTO_STARTER_STATE, 6, LittlerootTown_ProfessorBirchsLab_EventScript_AlreadyChoseJohtoStarter
-	applymovement LOCALID_BIRCHS_LAB_BIRCH, Common_Movement_WalkInPlaceFasterRight
-	waitmovement 0
-	showmonpic SPECIES_CYNDAQUIL, 10, 3
-	msgbox LittlerootTown_ProfessorBirchsLab_Text_YoullTakeCyndaquil, MSGBOX_YESNO
-	goto_if_eq VAR_RESULT, NO, LittlerootTown_ProfessorBirchsLab_EventScript_TakeYourTime
-	goto LittlerootTown_ProfessorBirchsLab_EventScript_GiveCyndaquil
+	goto LittlerootTown_ProfessorBirchsLab_EventScript_PickLegendary
 	end
 
 LittlerootTown_ProfessorBirchsLab_EventScript_Totodile::
-	release
-	goto_if_ge VAR_DEX_UPGRADE_JOHTO_STARTER_STATE, 6, LittlerootTown_ProfessorBirchsLab_EventScript_AlreadyChoseJohtoStarter
-	applymovement LOCALID_BIRCHS_LAB_BIRCH, Common_Movement_WalkInPlaceFasterRight
-	waitmovement 0
-	showmonpic SPECIES_TOTODILE, 10, 3
-	msgbox LittlerootTown_ProfessorBirchsLab_Text_YoullTakeTotodile, MSGBOX_YESNO
-	goto_if_eq VAR_RESULT, NO, LittlerootTown_ProfessorBirchsLab_EventScript_TakeYourTime
-	goto LittlerootTown_ProfessorBirchsLab_EventScript_GiveTotodile
+	goto LittlerootTown_ProfessorBirchsLab_EventScript_PickLegendary
 	end
 
 LittlerootTown_ProfessorBirchsLab_EventScript_Chikorita::
+	goto LittlerootTown_ProfessorBirchsLab_EventScript_PickLegendary
+	end
+
+@ emerald-allgen: all three Poké Balls on the table open Birch's legendary pick
+LittlerootTown_ProfessorBirchsLab_EventScript_PickLegendary::
 	release
 	goto_if_ge VAR_DEX_UPGRADE_JOHTO_STARTER_STATE, 6, LittlerootTown_ProfessorBirchsLab_EventScript_AlreadyChoseJohtoStarter
-	applymovement LOCALID_BIRCHS_LAB_BIRCH, Common_Movement_WalkInPlaceFasterRight
-	waitmovement 0
-	showmonpic SPECIES_CHIKORITA, 10, 3
-	msgbox LittlerootTown_ProfessorBirchsLab_Text_YoullTakeChikorita, MSGBOX_YESNO
-	goto_if_eq VAR_RESULT, NO, LittlerootTown_ProfessorBirchsLab_EventScript_TakeYourTime
-	goto LittlerootTown_ProfessorBirchsLab_EventScript_GiveChikorita
+	lockall
+	special ChooseLegendaryReward
+	goto_if_eq VAR_RESULT, SPECIES_NONE, LittlerootTown_ProfessorBirchsLab_EventScript_LegendaryTakeYourTime
+	copyvar VAR_TEMP_TRANSFERRED_SPECIES, VAR_RESULT
+	bufferspeciesname STR_VAR_1, VAR_TEMP_TRANSFERRED_SPECIES
+	givemon VAR_TEMP_TRANSFERRED_SPECIES, 50
+	goto_if_eq VAR_RESULT, MON_GIVEN_TO_PARTY, LittlerootTown_ProfessorBirchsLab_EventScript_SendLegendaryToParty
+	goto_if_eq VAR_RESULT, MON_GIVEN_TO_PC, LittlerootTown_ProfessorBirchsLab_EventScript_SendLegendaryToPC
+	goto Common_EventScript_NoMoreRoomForPokemon
+	end
+
+LittlerootTown_ProfessorBirchsLab_EventScript_LegendaryTakeYourTime::
+	msgbox LittlerootTown_ProfessorBirchsLab_Text_TakeYourTimeAllInvaluable, MSGBOX_DEFAULT
+	releaseall
+	end
+
+LittlerootTown_ProfessorBirchsLab_EventScript_SendLegendaryToParty::
+	call LittlerootTown_ProfessorBirchsLab_EventScript_ReceivedJohtoStarter
+	call LittlerootTown_ProfessorBirchsLab_EventScript_RemoveTableBalls
+	msgbox gText_NicknameThisPokemon, MSGBOX_YESNO
+	goto_if_eq VAR_RESULT, NO, LittlerootTown_ProfessorBirchsLab_EventScript_ReceivedLegendary
+	call Common_EventScript_GetGiftMonPartySlot
+	call Common_EventScript_NameReceivedPartyMon
+	goto LittlerootTown_ProfessorBirchsLab_EventScript_ReceivedLegendary
+	end
+
+LittlerootTown_ProfessorBirchsLab_EventScript_SendLegendaryToPC::
+	call LittlerootTown_ProfessorBirchsLab_EventScript_ReceivedJohtoStarter
+	call LittlerootTown_ProfessorBirchsLab_EventScript_RemoveTableBalls
+	msgbox gText_NicknameThisPokemon, MSGBOX_YESNO
+	goto_if_eq VAR_RESULT, NO, LittlerootTown_ProfessorBirchsLab_EventScript_LegendaryTransferredToPC
+	call Common_EventScript_NameReceivedBoxMon
+	goto LittlerootTown_ProfessorBirchsLab_EventScript_LegendaryTransferredToPC
+	end
+
+LittlerootTown_ProfessorBirchsLab_EventScript_LegendaryTransferredToPC::
+	call Common_EventScript_TransferredToPC
+	goto LittlerootTown_ProfessorBirchsLab_EventScript_ReceivedLegendary
+	end
+
+LittlerootTown_ProfessorBirchsLab_EventScript_RemoveTableBalls::
+	removeobject LOCALID_BIRCHS_LAB_CYNDAQUIL_BALL
+	removeobject LOCALID_BIRCHS_LAB_TOTODILE_BALL
+	removeobject LOCALID_BIRCHS_LAB_CHIKORITA_BALL
+	return
+
+LittlerootTown_ProfessorBirchsLab_EventScript_ReceivedLegendary::
+	msgbox LittlerootTown_ProfessorBirchsLab_Text_GrassyPatchWaiting, MSGBOX_DEFAULT
+	setvar VAR_DEX_UPGRADE_JOHTO_STARTER_STATE, 6
+	releaseall
 	end
 
 LittlerootTown_ProfessorBirchsLab_EventScript_AlreadyChoseJohtoStarter::
@@ -876,26 +911,20 @@ LittlerootTown_ProfessorBirchsLab_Text_BrendanTakeBreakFromFieldwork:
 
 LittlerootTown_ProfessorBirchsLab_Text_CompletedDexChoosePokemon:
 	.string "PROF. BIRCH: Oh, {PLAYER}{KUN}!\n"
-	.string "Let's have a look at your POKéDEX.\p"
-	.string "… … … … … …\n"
-	.string "… … … … … …\p"
-	.string "Yes, there's no doubt about it.\p"
-	.string "You really have completed the HOENN\n"
-	.string "region's POKéDEX.\p"
-	.string "That's more than just impressive.\p"
+	.string "The CHAMPION of HOENN, back again!\p"
 	.string "I have a gift for you.\p"
 	.string "Consider it my show of appreciation\n"
 	.string "for the fantastic work you've done.\p"
-	.string "My gift is a rare POKéMON only found\n"
-	.string "in another region!\p"
-	.string "You can have any one of these\n"
-	.string "three POKéMON!$"
+	.string "These POKé BALLS hold LEGENDARY\n"
+	.string "POKéMON from other regions!\p"
+	.string "You can have any one of them.\n"
+	.string "Just one, mind you!$"
 
 LittlerootTown_ProfessorBirchsLab_Text_CanHaveAnyOneOfRarePokemon:
-	.string "PROF. BIRCH: These are rare POKéMON\n"
-	.string "only found in another region!\p"
-	.string "You can have any one of these\n"
-	.string "three POKéMON!$"
+	.string "PROF. BIRCH: Those POKé BALLS hold\n"
+	.string "LEGENDARY POKéMON!\p"
+	.string "Check any of them, and pick\n"
+	.string "the one you want most!$"
 
 LittlerootTown_ProfessorBirchsLab_Text_YoullTakeCyndaquil:
 	.string "PROF. BIRCH: The FIRE POKéMON\n"
@@ -936,7 +965,7 @@ LittlerootTown_ProfessorBirchsLab_Text_NicknameJohtoStarter:
 
 LittlerootTown_ProfessorBirchsLab_Text_GrassyPatchWaiting:
 	.string "PROF. BIRCH: Listen, {PLAYER}{KUN}.\n"
-	.string "You've completed the HOENN POKéDEX,\l"
+	.string "You've become the CHAMPION,\l"
 	.string "but your POKéMON journey isn't over.\p"
 	.string "There is no end to the road\n"
 	.string "that is POKéMON.\p"

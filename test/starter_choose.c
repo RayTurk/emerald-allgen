@@ -1,6 +1,8 @@
 #include "global.h"
 #include "event_data.h"
 #include "pokemon.h"
+#include "battle_util.h"
+#include "move.h"
 #include "starter_choose.h"
 #include "test/test.h"
 
@@ -12,8 +14,10 @@ TEST("(Starters) Every starter choice is a real species")
     for (i = 0; i < NUM_STARTER_CHOICES; i++)
     {
         u32 species = GetStarterPokemon(i);
-        EXPECT_NE(species, SPECIES_NONE);
+        if (species == SPECIES_NONE)
+            continue; // intentionally empty Poké Ball slot
         EXPECT(species < NUM_SPECIES);
+        EXPECT(gSpeciesInfo[species].baseHP > 0);
     }
 }
 
@@ -57,4 +61,46 @@ TEST("(Starters) Special starters give the rival a fixed counter line")
     EXPECT_EQ(GetRivalStarterSpecies(SPECIES_TORCHIC), SPECIES_FROAKIE);
     EXPECT_EQ(GetRivalStarterSpecies(SPECIES_GROVYLE), SPECIES_FROGADIER);
     VarSet(VAR_STARTER_CHOICE, 0);
+}
+
+TEST("(Starters) Every starter can damage Birch's Zigzagoon at level 5")
+{
+    u32 i, j;
+    for (i = 0; i < NUM_STARTER_CHOICES; i++)
+    {
+        struct Pokemon mon;
+        bool32 canFight = FALSE;
+        u32 species = GetStarterPokemon(i);
+
+        if (species == SPECIES_NONE)
+            continue;
+        CreateMon(&mon, species, 5, 0, OTID_STRUCT_PRESET(0));
+        EnsureStarterCanFight(&mon);
+        for (j = 0; j < MAX_MON_MOVES; j++)
+        {
+            enum Move move = GetMonData(&mon, MON_DATA_MOVE1 + j);
+            if (move != MOVE_NONE && GetMovePower(move) > 0
+             && GetTypeModifier(GetMoveType(move), TYPE_NORMAL) > UQ_4_12(0.0))
+                canFight = TRUE;
+        }
+        EXPECT(canFight);
+    }
+}
+
+TEST("(Starters) Birch's post-game legendaries are all real species")
+{
+    u32 i;
+    for (i = 0; i < NUM_REWARD_GROUPS * STARTERS_PER_GROUP; i++)
+    {
+        u32 species = GetLegendaryRewardPokemon(i);
+        EXPECT_NE(species, SPECIES_NONE);
+        EXPECT(species < NUM_SPECIES);
+    }
+}
+
+TEST("(Starters) Baby legendary starters evolve by level")
+{
+    EXPECT_EQ(GetSpeciesEvolutions(SPECIES_POIPOLE)[0].method, EVO_LEVEL);
+    EXPECT_EQ(GetSpeciesEvolutions(SPECIES_POIPOLE)[0].param, 40);
+    EXPECT_EQ(GetSpeciesEvolutions(SPECIES_MELTAN)[0].targetSpecies, SPECIES_MELMETAL);
 }

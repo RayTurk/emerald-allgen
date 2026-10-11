@@ -7382,7 +7382,11 @@ const struct SpeciesInfo gSpeciesInfoGen8[] =
         .evolutions = EVOLUTION({EVO_SCRIPT_TRIGGER, EVO_TRIGGER_DARK_SCROLL, SPECIES_URSHIFU_SINGLE_STRIKE},
                                 {EVO_SCRIPT_TRIGGER, EVO_TRIGGER_WATER_SCROLL, SPECIES_URSHIFU_RAPID_STRIKE},
                                 {EVO_ITEM, ITEM_SCROLL_OF_DARKNESS, SPECIES_URSHIFU_SINGLE_STRIKE},
-                                {EVO_ITEM, ITEM_SCROLL_OF_WATERS,   SPECIES_URSHIFU_RAPID_STRIKE}),
+                                {EVO_ITEM, ITEM_SCROLL_OF_WATERS,   SPECIES_URSHIFU_RAPID_STRIKE},
+                                // emerald-allgen: no Tower of Two Fists here. Level 40 at night for
+                                // Single Strike (Dark), any other time for Rapid Strike (Water).
+                                {EVO_LEVEL, 40, SPECIES_URSHIFU_SINGLE_STRIKE, CONDITIONS({IF_TIME, TIME_NIGHT})},
+                                {EVO_LEVEL, 40, SPECIES_URSHIFU_RAPID_STRIKE, CONDITIONS({IF_NOT_TIME, TIME_NIGHT})}),
     },
 
     [SPECIES_URSHIFU_SINGLE_STRIKE] =
