@@ -5,6 +5,7 @@
 #include "event_data.h"
 #include "gpu_regs.h"
 #include "international_string_util.h"
+#include "list_menu.h"
 #include "main.h"
 #include "menu.h"
 #include "palette.h"
@@ -24,7 +25,7 @@
 #include "constants/songs.h"
 #include "constants/rgb.h"
 
-#define STARTER_MON_COUNT   3
+#define STARTER_MON_COUNT   STARTERS_PER_GROUP
 
 // Position of the sprite of the selected starter Pokémon
 #define STARTER_PKMN_POS_X (DISPLAY_WIDTH / 2)
@@ -43,7 +44,9 @@ static void Task_HandleConfirmStarterInput(u8 taskId);
 static void Task_DeclineStarter(u8 taskId);
 static void Task_MoveStarterChooseCursor(u8 taskId);
 static void Task_CreateStarterLabel(u8 taskId);
-static void CreateStarterPokemonLabel(u8 selection);
+static void CreateStarterPokemonLabel(u8 selection, u8 group);
+static void Task_ShowGroupMenu(u8 taskId);
+static void Task_HandleGroupMenuInput(u8 taskId);
 static u8 CreatePokemonFrontSprite(enum Species species, u8 x, u8 y);
 static void SpriteCB_SelectionHand(struct Sprite *sprite);
 static void SpriteCB_Pokeball(struct Sprite *sprite);
@@ -110,15 +113,99 @@ static const u8 sStarterLabelCoords[STARTER_MON_COUNT][2] =
     {8, 4},
 };
 
-#define GRASS_STARTER (IS_FRLG ? SPECIES_BULBASAUR  : SPECIES_TREECKO)
-#define FIRE_STARTER  (IS_FRLG ? SPECIES_CHARMANDER : SPECIES_TORCHIC)
-#define WATER_STARTER (IS_FRLG ? SPECIES_SQUIRTLE   : SPECIES_MUDKIP )
-
-static const u16 sStarterMon[STARTER_MON_COUNT] =
+// emerald-allgen: every starter group, in Poké Ball order (left, middle, right).
+// For Gen groups the order is always grass, fire, water, which the rival logic relies on.
+static const u16 sStarterMon[NUM_STARTER_CHOICES] =
 {
-    GRASS_STARTER,
-    FIRE_STARTER,
-    WATER_STARTER,
+    SPECIES_BULBASAUR,  SPECIES_CHARMANDER, SPECIES_SQUIRTLE,  // Gen 1
+    SPECIES_CHIKORITA,  SPECIES_CYNDAQUIL,  SPECIES_TOTODILE,  // Gen 2
+    SPECIES_TREECKO,    SPECIES_TORCHIC,    SPECIES_MUDKIP,    // Gen 3
+    SPECIES_TURTWIG,    SPECIES_CHIMCHAR,   SPECIES_PIPLUP,    // Gen 4
+    SPECIES_SNIVY,      SPECIES_TEPIG,      SPECIES_OSHAWOTT,  // Gen 5
+    SPECIES_CHESPIN,    SPECIES_FENNEKIN,   SPECIES_FROAKIE,   // Gen 6
+    SPECIES_ROWLET,     SPECIES_LITTEN,     SPECIES_POPPLIO,   // Gen 7
+    SPECIES_GROOKEY,    SPECIES_SCORBUNNY,  SPECIES_SOBBLE,    // Gen 8
+    SPECIES_SPRIGATITO, SPECIES_FUECOCO,    SPECIES_QUAXLY,    // Gen 9
+    SPECIES_PIKACHU,    SPECIES_EEVEE,      SPECIES_ABRA,      // Specials 1
+    SPECIES_RIOLU,      SPECIES_GASTLY,     SPECIES_DRATINI,   // Specials 2
+};
+
+// Full three-stage lines for the Gen starters: [gen][grass/fire/water][stage].
+// Used to swap the rival's Hoenn starter for the same-gen equivalent.
+static const u16 sStarterLines[NUM_GEN_STARTER_GROUPS][STARTERS_PER_GROUP][3] =
+{
+    {{SPECIES_BULBASAUR, SPECIES_IVYSAUR, SPECIES_VENUSAUR}, {SPECIES_CHARMANDER, SPECIES_CHARMELEON, SPECIES_CHARIZARD}, {SPECIES_SQUIRTLE, SPECIES_WARTORTLE, SPECIES_BLASTOISE}},
+    {{SPECIES_CHIKORITA, SPECIES_BAYLEEF, SPECIES_MEGANIUM}, {SPECIES_CYNDAQUIL, SPECIES_QUILAVA, SPECIES_TYPHLOSION}, {SPECIES_TOTODILE, SPECIES_CROCONAW, SPECIES_FERALIGATR}},
+    {{SPECIES_TREECKO, SPECIES_GROVYLE, SPECIES_SCEPTILE}, {SPECIES_TORCHIC, SPECIES_COMBUSKEN, SPECIES_BLAZIKEN}, {SPECIES_MUDKIP, SPECIES_MARSHTOMP, SPECIES_SWAMPERT}},
+    {{SPECIES_TURTWIG, SPECIES_GROTLE, SPECIES_TORTERRA}, {SPECIES_CHIMCHAR, SPECIES_MONFERNO, SPECIES_INFERNAPE}, {SPECIES_PIPLUP, SPECIES_PRINPLUP, SPECIES_EMPOLEON}},
+    {{SPECIES_SNIVY, SPECIES_SERVINE, SPECIES_SERPERIOR}, {SPECIES_TEPIG, SPECIES_PIGNITE, SPECIES_EMBOAR}, {SPECIES_OSHAWOTT, SPECIES_DEWOTT, SPECIES_SAMUROTT}},
+    {{SPECIES_CHESPIN, SPECIES_QUILLADIN, SPECIES_CHESNAUGHT}, {SPECIES_FENNEKIN, SPECIES_BRAIXEN, SPECIES_DELPHOX}, {SPECIES_FROAKIE, SPECIES_FROGADIER, SPECIES_GRENINJA}},
+    {{SPECIES_ROWLET, SPECIES_DARTRIX, SPECIES_DECIDUEYE}, {SPECIES_LITTEN, SPECIES_TORRACAT, SPECIES_INCINEROAR}, {SPECIES_POPPLIO, SPECIES_BRIONNE, SPECIES_PRIMARINA}},
+    {{SPECIES_GROOKEY, SPECIES_THWACKEY, SPECIES_RILLABOOM}, {SPECIES_SCORBUNNY, SPECIES_RABOOT, SPECIES_CINDERACE}, {SPECIES_SOBBLE, SPECIES_DRIZZILE, SPECIES_INTELEON}},
+    {{SPECIES_SPRIGATITO, SPECIES_FLORAGATO, SPECIES_MEOWSCARADA}, {SPECIES_FUECOCO, SPECIES_CROCALOR, SPECIES_SKELEDIRGE}, {SPECIES_QUAXLY, SPECIES_QUAXWELL, SPECIES_QUAQUAVAL}},
+};
+
+#define HOENN_GEN_GROUP 2
+
+// For special starters the rival uses a fixed counter line, indexed like the special slots.
+static const u8 sSpecialRivalLines[NUM_SPECIAL_GROUPS * STARTERS_PER_GROUP][2] =
+{
+    {3, 0}, // Pikachu -> Turtwig line (Torterra is Ground)
+    {5, 0}, // Eevee   -> Chespin line (Chesnaught is Fighting)
+    {5, 2}, // Abra    -> Froakie line (Greninja is Dark)
+    {5, 1}, // Riolu   -> Fennekin line (Delphox is Psychic)
+    {6, 1}, // Gastly  -> Litten line (Incineroar is Dark)
+    {6, 2}, // Dratini -> Popplio line (Primarina is Fairy)
+};
+
+static const struct ListMenuItem sStarterGroupItems[NUM_STARTER_GROUPS] =
+{
+    {COMPOUND_STRING("Kanto"),      0},
+    {COMPOUND_STRING("Johto"),      1},
+    {COMPOUND_STRING("Hoenn"),      2},
+    {COMPOUND_STRING("Sinnoh"),     3},
+    {COMPOUND_STRING("Unova"),      4},
+    {COMPOUND_STRING("Kalos"),      5},
+    {COMPOUND_STRING("Alola"),      6},
+    {COMPOUND_STRING("Galar"),      7},
+    {COMPOUND_STRING("Paldea"),     8},
+    {COMPOUND_STRING("Specials 1"), 9},
+    {COMPOUND_STRING("Specials 2"), 10},
+};
+
+static const u8 sText_ChooseRegion[] = _("PROF. BIRCH is in trouble!\nPick a region, then a POKéMON.");
+
+static const struct WindowTemplate sWindowTemplate_GroupList =
+{
+    .bg = 0,
+    .tilemapLeft = 10,
+    .tilemapTop = 1,
+    .width = 10,
+    .height = 12,
+    .paletteNum = 14,
+    .baseBlock = 0x02C0
+};
+
+static const struct ListMenuTemplate sListMenuTemplate_Groups =
+{
+    .items = sStarterGroupItems,
+    .moveCursorFunc = ListMenuDefaultCursorMoveFunc,
+    .itemPrintFunc = NULL,
+    .totalItems = NUM_STARTER_GROUPS,
+    .maxShowed = 6,
+    .windowId = 0,
+    .header_X = 0,
+    .item_X = 8,
+    .cursor_X = 0,
+    .upText_Y = 1,
+    .cursorPal = 2,
+    .fillValue = 1,
+    .cursorShadowPal = 3,
+    .lettersSpacing = 0,
+    .itemVerticalPadding = 0,
+    .scrollMultiple = LIST_NO_MULTIPLE_SCROLL,
+    .fontId = FONT_NORMAL,
+    .cursorKind = CURSOR_BLACK_ARROW,
 };
 
 static const struct BgTemplate sBgTemplates[3] =
@@ -349,9 +436,67 @@ static const struct SpriteTemplate sSpriteTemplate_StarterCircle =
 // .text
 u16 GetStarterPokemon(u16 chosenStarterId)
 {
-    if (chosenStarterId > STARTER_MON_COUNT)
+    if (chosenStarterId >= NUM_STARTER_CHOICES)
         chosenStarterId = 0;
     return sStarterMon[chosenStarterId];
+}
+
+// VAR_STARTER_CHOICE holds the flat index + 1, so 0 means no starter has been picked yet.
+static s32 GetChosenStarterIndex(void)
+{
+    u16 value = VarGet(VAR_STARTER_CHOICE);
+    if (value == 0 || value > NUM_STARTER_CHOICES)
+        return -1;
+    return value - 1;
+}
+
+u16 GetChosenStarterPokemon(void)
+{
+    s32 index = GetChosenStarterIndex();
+    return GetStarterPokemon(index < 0 ? 0 : index);
+}
+
+bool32 IsChosenStarterSpecial(void)
+{
+    return GetChosenStarterIndex() >= NUM_GEN_STARTER_GROUPS * STARTERS_PER_GROUP;
+}
+
+// The vanilla scripts use VAR_STARTER_MON (0 grass, 1 fire, 2 water) to pick which rival
+// trainer to fight. Gen starters keep their element slot. Specials all use slot 0; their
+// rival team gets swapped to a fixed counter line in GetRivalStarterSpecies.
+u16 GetStarterRivalSlot(u16 chosenStarterId)
+{
+    if (chosenStarterId >= NUM_GEN_STARTER_GROUPS * STARTERS_PER_GROUP)
+        return 0;
+    return chosenStarterId % STARTERS_PER_GROUP;
+}
+
+// Called for each mon in a rival's party. If the mon is part of a Hoenn starter line,
+// return the same evolution stage of the line that counters the player's actual pick.
+u16 GetRivalStarterSpecies(u16 species)
+{
+    s32 choice = GetChosenStarterIndex();
+    u32 element, stage;
+
+    if (choice < 0)
+        return species;
+
+    for (element = 0; element < STARTERS_PER_GROUP; element++)
+    {
+        for (stage = 0; stage < 3; stage++)
+        {
+            if (sStarterLines[HOENN_GEN_GROUP][element][stage] != species)
+                continue;
+
+            if (choice >= NUM_GEN_STARTER_GROUPS * STARTERS_PER_GROUP)
+            {
+                const u8 *line = sSpecialRivalLines[choice - NUM_GEN_STARTER_GROUPS * STARTERS_PER_GROUP];
+                return sStarterLines[line[0]][line[1]][stage];
+            }
+            return sStarterLines[choice / STARTERS_PER_GROUP][element][stage];
+        }
+    }
+    return species;
 }
 
 static void VblankCB_StarterChoose(void)
@@ -365,6 +510,14 @@ static void VblankCB_StarterChoose(void)
 #define tStarterSelection   data[0]
 #define tPkmnSpriteId       data[1]
 #define tCircleSpriteId     data[2]
+#define tGroup              data[3]
+#define tListTaskId         data[4]
+#define tShowBalls          data[5]
+#define tListScroll         data[6]
+#define tListRow            data[7]
+#define tListWindowId       data[8]
+
+#define CURRENT_STARTER(taskId) (gTasks[taskId].tGroup * STARTERS_PER_GROUP + gTasks[taskId].tStarterSelection)
 
 // Data for sSpriteTemplate_Pokeball
 #define sTaskId data[0]
@@ -438,8 +591,12 @@ void CB2_ChooseStarter(void)
     ShowBg(2);
     ShowBg(3);
 
-    taskId = CreateTask(Task_StarterChoose, 0);
+    taskId = CreateTask(Task_ShowGroupMenu, 0);
     gTasks[taskId].tStarterSelection = 1;
+    gTasks[taskId].tGroup = HOENN_GEN_GROUP;
+    gTasks[taskId].tShowBalls = FALSE;
+    gTasks[taskId].tListScroll = 0;
+    gTasks[taskId].tListRow = HOENN_GEN_GROUP;
 
     // Create hand sprite
     spriteId = CreateSprite(&sSpriteTemplate_Hand, 120, 56, 2);
@@ -470,9 +627,53 @@ static void CB2_StarterChoose(void)
     UpdatePaletteFade();
 }
 
+// emerald-allgen: step 1, pick a region (or a specials group) from a list
+static void Task_ShowGroupMenu(u8 taskId)
+{
+    struct ListMenuTemplate menu = sListMenuTemplate_Groups;
+    u8 windowId;
+
+    DrawStdFrameWithCustomTileAndPalette(0, FALSE, 0x2A8, 0xD);
+    FillWindowPixelBuffer(0, PIXEL_FILL(1));
+    AddTextPrinterParameterized(0, FONT_NORMAL, sText_ChooseRegion, 0, 1, 0, NULL);
+    PutWindowTilemap(0);
+
+    windowId = AddWindow(&sWindowTemplate_GroupList);
+    DrawStdFrameWithCustomTileAndPalette(windowId, FALSE, 0x2A8, 0xD);
+    FillWindowPixelBuffer(windowId, PIXEL_FILL(1));
+    PutWindowTilemap(windowId);
+    menu.windowId = windowId;
+    gTasks[taskId].tListWindowId = windowId;
+    gTasks[taskId].tListTaskId = ListMenuInit(&menu, gTasks[taskId].tListScroll, gTasks[taskId].tListRow);
+    ScheduleBgCopyTilemapToVram(0);
+    gTasks[taskId].func = Task_HandleGroupMenuInput;
+}
+
+static void Task_HandleGroupMenuInput(u8 taskId)
+{
+    s32 input = ListMenu_ProcessInput(gTasks[taskId].tListTaskId);
+    u16 scroll, row;
+
+    if (input < 0)
+        return; // nothing chosen, or B pressed (there's nowhere to back out to)
+
+    PlaySE(SE_SELECT);
+    DestroyListMenuTask(gTasks[taskId].tListTaskId, &scroll, &row);
+    gTasks[taskId].tListScroll = scroll;
+    gTasks[taskId].tListRow = row;
+    ClearStdWindowAndFrameToTransparent(gTasks[taskId].tListWindowId, TRUE);
+    RemoveWindow(gTasks[taskId].tListWindowId);
+
+    gTasks[taskId].tGroup = input;
+    gTasks[taskId].tStarterSelection = 1;
+    gTasks[taskId].tShowBalls = TRUE;
+    gTasks[taskId].func = Task_StarterChoose;
+}
+
+// Step 2, pick one of the three Poké Balls for that group
 static void Task_StarterChoose(u8 taskId)
 {
-    CreateStarterPokemonLabel(gTasks[taskId].tStarterSelection);
+    CreateStarterPokemonLabel(gTasks[taskId].tStarterSelection, gTasks[taskId].tGroup);
     DrawStdFrameWithCustomTileAndPalette(0, FALSE, 0x2A8, 0xD);
     AddTextPrinterParameterized(0, FONT_NORMAL, gText_BirchInTrouble, 0, 1, 0, NULL);
     PutWindowTilemap(0);
@@ -495,12 +696,20 @@ static void Task_HandleStarterChooseInput(u8 taskId)
         gTasks[taskId].tCircleSpriteId = spriteId;
 
         // Create Pokémon sprite
-        spriteId = CreatePokemonFrontSprite(GetStarterPokemon(gTasks[taskId].tStarterSelection), sPokeballCoords[selection][0], sPokeballCoords[selection][1]);
+        spriteId = CreatePokemonFrontSprite(GetStarterPokemon(CURRENT_STARTER(taskId)), sPokeballCoords[selection][0], sPokeballCoords[selection][1]);
         gSprites[spriteId].affineAnims = &sAffineAnims_StarterPokemon;
         gSprites[spriteId].callback = SpriteCB_StarterPokemon;
 
         gTasks[taskId].tPkmnSpriteId = spriteId;
         gTasks[taskId].func = Task_WaitForStarterSprite;
+    }
+    else if (JOY_NEW(B_BUTTON))
+    {
+        // Back to the region list
+        PlaySE(SE_SELECT);
+        ClearStarterLabel();
+        gTasks[taskId].tShowBalls = FALSE;
+        gTasks[taskId].func = Task_ShowGroupMenu;
     }
     else if (JOY_NEW(DPAD_LEFT) && selection > 0)
     {
@@ -526,7 +735,7 @@ static void Task_WaitForStarterSprite(u8 taskId)
 
 static void Task_AskConfirmStarter(u8 taskId)
 {
-    PlayCry_Normal(GetStarterPokemon(gTasks[taskId].tStarterSelection), 0);
+    PlayCry_Normal(GetStarterPokemon(CURRENT_STARTER(taskId)), 0);
     FillWindowPixelBuffer(0, PIXEL_FILL(1));
     AddTextPrinterParameterized(0, FONT_NORMAL, gText_ConfirmStarterChoice, 0, 1, 0, NULL);
     ScheduleBgCopyTilemapToVram(0);
@@ -542,7 +751,7 @@ static void Task_HandleConfirmStarterInput(u8 taskId)
     {
     case 0:  // YES
         // Return the starter choice and exit.
-        gSpecialVar_Result = gTasks[taskId].tStarterSelection;
+        gSpecialVar_Result = CURRENT_STARTER(taskId);
         ResetAllPicSprites();
         SetMainCallback2(gMain.savedCallback);
         break;
@@ -566,7 +775,7 @@ static void Task_DeclineStarter(u8 taskId)
     gTasks[taskId].func = Task_StarterChoose;
 }
 
-static void CreateStarterPokemonLabel(u8 selection)
+static void CreateStarterPokemonLabel(u8 selection, u8 group)
 {
     u8 categoryText[32];
     struct WindowTemplate winTemplate;
@@ -574,7 +783,7 @@ static void CreateStarterPokemonLabel(u8 selection)
     s32 width;
     u8 labelLeft, labelRight, labelTop, labelBottom;
 
-    enum Species species = GetStarterPokemon(selection);
+    enum Species species = GetStarterPokemon(group * STARTERS_PER_GROUP + selection);
     CopyMonCategoryText(species, categoryText);
     speciesName = GetSpeciesName(species);
 
@@ -621,7 +830,7 @@ static void Task_MoveStarterChooseCursor(u8 taskId)
 
 static void Task_CreateStarterLabel(u8 taskId)
 {
-    CreateStarterPokemonLabel(gTasks[taskId].tStarterSelection);
+    CreateStarterPokemonLabel(gTasks[taskId].tStarterSelection, gTasks[taskId].tGroup);
     gTasks[taskId].func = Task_HandleStarterChooseInput;
 }
 
@@ -637,6 +846,7 @@ static u8 CreatePokemonFrontSprite(enum Species species, u8 x, u8 y)
 static void SpriteCB_SelectionHand(struct Sprite *sprite)
 {
     // Float up and down above selected Poké Ball
+    sprite->invisible = !gTasks[sprite->data[0]].tShowBalls;
     sprite->x = sCursorCoords[gTasks[sprite->data[0]].tStarterSelection][0];
     sprite->y = sCursorCoords[gTasks[sprite->data[0]].tStarterSelection][1];
     sprite->y2 = Sin(sprite->data[1], 8);
@@ -646,6 +856,7 @@ static void SpriteCB_SelectionHand(struct Sprite *sprite)
 static void SpriteCB_Pokeball(struct Sprite *sprite)
 {
     // Animate Poké Ball if currently selected
+    sprite->invisible = !gTasks[sprite->sTaskId].tShowBalls;
     if (gTasks[sprite->sTaskId].tStarterSelection == sprite->sBallId)
         StartSpriteAnimIfDifferent(sprite, 1);
     else

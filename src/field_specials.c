@@ -1542,8 +1542,14 @@ void LoadWallyZigzagoon(void)
 bool8 IsStarterInParty(void)
 {
     u8 i;
-    u16 starter = GetStarterPokemon(VarGet(VAR_STARTER_MON));
-    u8 partyCount = CalculatePlayerPartyCount();
+    u16 starter;
+    u8 partyCount;
+
+    // emerald-allgen: the Petalburg type-lesson NPC only has lines for grass/fire/water starters
+    if (IsChosenStarterSpecial())
+        return FALSE;
+    starter = GetChosenStarterPokemon();
+    partyCount = CalculatePlayerPartyCount();
     for (i = 0; i < partyCount; i++)
     {
         if (GetMonData(&gParties[B_TRAINER_PLAYER][i], MON_DATA_SPECIES_OR_EGG) == starter)

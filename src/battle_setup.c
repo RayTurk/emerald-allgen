@@ -1008,7 +1008,9 @@ static void CB2_GiveStarter(void)
 {
     u16 starterMon;
 
-    *GetVarPointer(VAR_STARTER_MON) = gSpecialVar_Result;
+    // emerald-allgen: keep the full pick separately; VAR_STARTER_MON stays 0-2 for the vanilla rival scripts
+    VarSet(VAR_STARTER_CHOICE, gSpecialVar_Result + 1);
+    *GetVarPointer(VAR_STARTER_MON) = GetStarterRivalSlot(gSpecialVar_Result);
     starterMon = GetStarterPokemon(gSpecialVar_Result);
     ScriptGiveMon(starterMon, 5, ITEM_NONE);
     ResetTasks();
@@ -2252,7 +2254,17 @@ void CreateNPCTrainerPartyFromTrainer(struct Pokemon *party, const struct Traine
     for (i = 0; i < monsCount; i++)
     {
         u32 monIndex = monIndices[i];
-        GenerateMonFromTrainerMon(&party[i], &trainer->party[monIndex], trainerGen);
+        if (trainer->trainerClass == TRAINER_CLASS_RIVAL)
+        {
+            // emerald-allgen: the rival's Hoenn starter becomes the line that counters the player's pick
+            struct TrainerMon rivalMon = trainer->party[monIndex];
+            rivalMon.species = GetRivalStarterSpecies(rivalMon.species);
+            GenerateMonFromTrainerMon(&party[i], &rivalMon, trainerGen);
+        }
+        else
+        {
+            GenerateMonFromTrainerMon(&party[i], &trainer->party[monIndex], trainerGen);
+        }
     }
     Free(trainerGen);
 }
