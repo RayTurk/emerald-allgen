@@ -93,8 +93,10 @@ TEST("(Starters) Birch's post-game legendaries are all real species")
     for (i = 0; i < NUM_REWARD_GROUPS * STARTERS_PER_GROUP; i++)
     {
         u32 species = GetLegendaryRewardPokemon(i);
-        EXPECT_NE(species, SPECIES_NONE);
+        if (species == SPECIES_NONE)
+            continue; // intentionally empty Poké Ball slot
         EXPECT(species < NUM_SPECIES);
+        EXPECT(gSpeciesInfo[species].baseHP > 0);
     }
 }
 

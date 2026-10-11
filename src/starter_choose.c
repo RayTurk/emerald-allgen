@@ -138,8 +138,8 @@ static const u16 sStarterMon[(NUM_STARTER_GROUPS + NUM_REWARD_GROUPS) * STARTERS
     SPECIES_MEW,        SPECIES_MEWTWO,     SPECIES_CELEBI,    // Mythics
     SPECIES_RAIKOU,     SPECIES_ENTEI,      SPECIES_SUICUNE,   // Beasts
     // Post-game reward groups (Birch's lab after the National Dex upgrade)
-    SPECIES_MEW,        SPECIES_MEWTWO,     SPECIES_CELEBI,    // Mythic
-    SPECIES_RAIKOU,     SPECIES_ENTEI,      SPECIES_SUICUNE,   // Beasts
+    SPECIES_ARTICUNO,   SPECIES_ZAPDOS,     SPECIES_MOLTRES,   // Birds
+    SPECIES_LUGIA,      SPECIES_HO_OH,      SPECIES_NONE,      // Towers (third ball left empty)
 };
 
 #define FIRST_REWARD_GROUP NUM_STARTER_GROUPS
@@ -198,8 +198,8 @@ static const struct ListMenuItem sStarterGroupItems[NUM_STARTER_GROUPS] =
 
 static const struct ListMenuItem sRewardGroupItems[NUM_REWARD_GROUPS] =
 {
-    {COMPOUND_STRING("Mythic"), FIRST_REWARD_GROUP},
-    {COMPOUND_STRING("Beasts"), FIRST_REWARD_GROUP + 1},
+    {COMPOUND_STRING("Birds"),  FIRST_REWARD_GROUP},
+    {COMPOUND_STRING("Towers"), FIRST_REWARD_GROUP + 1},
 };
 
 static const u8 sText_ChooseLegendGroup[] = _("PROF. BIRCH: Pick any one of these.\nPress B if you need more time.");
