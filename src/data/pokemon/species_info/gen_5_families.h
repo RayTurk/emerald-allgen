@@ -11580,7 +11580,9 @@ const struct SpeciesInfo gSpeciesInfoGen5[] =
         .levelUpLearnset = sBisharpLevelUpLearnset,
         .teachableLearnset = sBisharpTeachableLearnset,
     #if P_GEN_9_CROSS_EVOS
-        .evolutions = EVOLUTION({EVO_LEVEL, 0, SPECIES_KINGAMBIT, CONDITIONS({IF_DEFEAT_X_WITH_ITEMS, SPECIES_BISHARP, ITEM_LEADERS_CREST, 3})}),
+        // emerald-allgen: Leader's Crest can also be used directly, since wild Bisharp holding one are rare
+        .evolutions = EVOLUTION({EVO_LEVEL, 0, SPECIES_KINGAMBIT, CONDITIONS({IF_DEFEAT_X_WITH_ITEMS, SPECIES_BISHARP, ITEM_LEADERS_CREST, 3})},
+                                {EVO_ITEM, ITEM_LEADERS_CREST, SPECIES_KINGAMBIT}),
     #endif
     },
 
