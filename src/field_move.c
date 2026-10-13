@@ -3,6 +3,10 @@
 #include "field_move.h"
 #include "fldeff.h"
 #include "fldeff_misc.h"
+#include "item.h"
+#include "pokemon.h"
+#include "constants/items.h"
+#include "constants/tms_hms.h"
 #include "party_menu.h"
 #include "strings.h"
 #include "constants/field_move.h"
@@ -42,6 +46,33 @@ const struct FieldMoveUnlock gFieldMoveUnlocks[FIELD_MOVE_UNLOCK_COUNT] =
         .lockedMessage = gText_CantUseUntilNewBadge,
     },
 };
+
+// emerald-allgen: HM-free field moves
+static enum Item GetHMForMove(enum Move move)
+{
+#define HM_FOR_MOVE(id) if (move == MOVE_##id) return ITEM_HM_##id;
+    FOREACH_HM(HM_FOR_MOVE)
+#undef HM_FOR_MOVE
+    return ITEM_NONE;
+}
+
+bool32 MonCanUseFieldMove(struct Pokemon *mon, enum Move move)
+{
+    enum Species species = GetMonData(mon, MON_DATA_SPECIES);
+    enum Item hm;
+
+    if (move == MOVE_NONE || species == SPECIES_NONE || GetMonData(mon, MON_DATA_IS_EGG))
+        return FALSE;
+    if (MonKnowsMove(mon, move))
+        return TRUE;
+
+    // Owning the HM stands in for knowing the move, so story gating (when each HM is
+    // handed out) and badge gating both still apply.
+    hm = GetHMForMove(move);
+    if (hm == ITEM_NONE || !CheckBagHasItem(hm, 1))
+        return FALSE;
+    return CanLearnTeachableMove(species, move);
+}
 
 #define FLAG_TO_BADGE(flag) flag - FLAG_BADGE01_GET
 

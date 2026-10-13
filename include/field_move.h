@@ -30,6 +30,11 @@ struct FieldMoveInfo
 };
 
 extern const struct FieldMoveInfo gFieldMoveInfo[];
+
+struct Pokemon;
+// emerald-allgen: HM-free field moves. TRUE if the mon knows the move, or if the move is
+// taught by an HM the player owns and the mon is able to learn it.
+bool32 MonCanUseFieldMove(struct Pokemon *mon, enum Move move);
 extern const struct FieldMoveUnlock gFieldMoveUnlocks[];
 
 static inline bool32 SetUpFieldMove(enum FieldMove fieldMove)

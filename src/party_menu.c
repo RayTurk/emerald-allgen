@@ -2970,6 +2970,32 @@ static void SetPartyMonFieldSelectionActions(struct Pokemon *mons, u8 slotId)
         }
     }
 
+    // emerald-allgen: Fly and Flash are only usable from this menu, so offer them when the
+    // mon could learn them and the player owns the HM. Other HM moves trigger by walking up
+    // to the obstacle. The menu holds at most 4 field moves.
+    {
+        static const u8 sMenuOnlyFieldMoves[] = {FIELD_MOVE_FLY, FIELD_MOVE_FLASH};
+        u32 k, fieldMoveCount = sPartyMenuInternal->numActions - 1;
+
+        for (k = 0; k < ARRAY_COUNT(sMenuOnlyFieldMoves) && fieldMoveCount < MAX_MON_MOVES; k++)
+        {
+            u32 fieldMove = sMenuOnlyFieldMoves[k];
+            bool32 alreadyListed = FALSE;
+
+            for (j = 1; j < sPartyMenuInternal->numActions; j++)
+            {
+                if (sPartyMenuInternal->actions[j] == fieldMove + MENU_FIELD_MOVES)
+                    alreadyListed = TRUE;
+            }
+            if (!alreadyListed && FieldMove_IsVisible(fieldMove)
+             && MonCanUseFieldMove(&mons[slotId], FieldMove_GetMoveId(fieldMove)))
+            {
+                AppendToList(sPartyMenuInternal->actions, &sPartyMenuInternal->numActions, fieldMove + MENU_FIELD_MOVES);
+                fieldMoveCount++;
+            }
+        }
+    }
+
     if (!InBattlePike())
     {
         if (GetMonData(&mons[1], MON_DATA_SPECIES) != SPECIES_NONE)
